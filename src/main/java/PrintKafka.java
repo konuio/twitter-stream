@@ -13,6 +13,7 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.apache.spark.streaming.kafka.KafkaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.Tuple2;
 
 /**
  * Created by matt on 3/27/16.
@@ -35,11 +36,11 @@ public class PrintKafka
                     ImmutableMap.of("metadata.broker.list", "localhost:9092"),
                     ImmutableSet.of("test")
             );
-            JavaDStream<String> values = messages.map(tuple -> tuple._2());
+            JavaDStream<String> values = messages.map(Tuple2::_2);
             values.foreach((rdd, t) -> {
-                logger.info("start batch {}", rdd.count());
+                logger.info("start batch", rdd.id());
                 rdd.foreach(value -> {
-                    logger.info("value {} {}", t, value);
+                    logger.info("value {}", value);
                 });
                 logger.info("end batch");
                 return null;
