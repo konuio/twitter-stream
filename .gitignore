@@ -4,3 +4,6 @@
 
 # Java
 target
+
+# Twitter
+twitter4j.properties

@@ -18,6 +18,9 @@ stop-slave.sh
 # Build and submit job
 mvn package && spark-submit --class PrintKafka --master local[4] target/twitter-stream-1.0-SNAPSHOT-jar-with-dependencies.jar
 
-# Add messages
+# Produce messages
 kafka-console-producer.sh --broker-list localhost:9092 --topic test
+
+# Consume messages
+kafka-console-consumer.sh --new-consumer --bootstrap-server localhost:9092 --topic test
 ```
