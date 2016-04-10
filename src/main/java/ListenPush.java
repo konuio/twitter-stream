@@ -35,7 +35,6 @@ public class ListenPush
                     {
                         logger.info("tweet {}", status.getText());
                         producer.send(new ProducerRecord<>("test", "tweet", status.getText()));
-                        logger.info("tweet sent {}", status.getText());
                     }
                 };
                 TwitterStream twitterStream = new TwitterStreamFactory().getInstance();
