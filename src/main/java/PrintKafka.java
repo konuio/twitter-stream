@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableSet;
 import kafka.serializer.StringDecoder;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.Time;
@@ -15,6 +16,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.Tuple2;
 
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 /**
  * Created by matt on 3/27/16.
  */
@@ -24,6 +32,7 @@ public class PrintKafka
 
     public static void main(String[] args) {
         try {
+            Map<String, Long> wordCounts = new HashMap<>();
             SparkConf conf = new SparkConf();
             conf.setAppName("PrintKafka");
             JavaStreamingContext context = new JavaStreamingContext(conf, Durations.seconds(2));
@@ -38,11 +47,17 @@ public class PrintKafka
             );
             JavaDStream<String> values = messages.map(Tuple2::_2);
             values.foreach((rdd, t) -> {
-                logger.info("start batch", rdd.id());
-                rdd.foreach(value -> {
-                    logger.info("value {}", value);
-                });
-                logger.info("end batch");
+                // Calculate rdd word counts
+                Map<String, Long> batchWordCounts = rdd
+                        .flatMap(tweet -> Arrays.asList(tweet.split("\\s+")))
+                        .countByValue();
+                logger.info("batch word counts {}", batchWordCounts);
+
+                addWordCounts(wordCounts, batchWordCounts);
+                List<Map.Entry<String, Long>> sortedWordCounts = wordCounts.entrySet().stream().sorted((entry1, entry2) -> {
+                    return -Long.compare(entry1.getValue(), entry2.getValue());
+                }).collect(Collectors.toList());
+                logger.info("word counts {}", sortedWordCounts);
                 return null;
             });
 
@@ -50,6 +65,15 @@ public class PrintKafka
             context.awaitTermination();
         } catch (Exception e) {
             throw Throwables.propagate(e);
+        }
+    }
+
+    private static void addWordCounts (Map<String, Long> wordCounts, Map<String, Long> batchWordCounts) {
+        for (Map.Entry<String, Long> batchWordCountEntry : batchWordCounts.entrySet()) {
+            wordCounts.put(
+                    batchWordCountEntry.getKey(),
+                    wordCounts.getOrDefault(batchWordCountEntry.getKey(), 0L) + batchWordCountEntry.getValue()
+            );
         }
     }
 }

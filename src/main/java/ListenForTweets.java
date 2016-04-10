@@ -29,6 +29,7 @@ public class ListenForTweets
             twitterStream.filter("Trump");
 
             // remove listener after we no longer want new events
+            // multiple streams: one per search term
         }
         catch (Exception e) {
             throw Throwables.propagate(e);
