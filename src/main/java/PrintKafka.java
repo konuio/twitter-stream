@@ -30,9 +30,15 @@ public class PrintKafka
 {
     private static Logger logger = LoggerFactory.getLogger(PrintKafka.class);
 
+    // TODO make parameterizable.
+    private static Integer distinctWordLimit = 10;
+    private static double decayRate = 0.5;
+    private static double dropThreshold = 0.25;
+    private static double initialWeight = 1;
+
     public static void main(String[] args) {
         try {
-            Map<String, Long> wordCounts = new HashMap<>();
+            Map<String, Double> wordCounts = new HashMap<>();
             SparkConf conf = new SparkConf();
             conf.setAppName("PrintKafka");
             JavaStreamingContext context = new JavaStreamingContext(conf, Durations.seconds(2));
@@ -54,9 +60,10 @@ public class PrintKafka
                 logger.info("batch word counts {}", batchWordCounts);
 
                 addWordCounts(wordCounts, batchWordCounts);
-                List<Map.Entry<String, Long>> sortedWordCounts = wordCounts.entrySet().stream().sorted((entry1, entry2) -> {
-                    return -Long.compare(entry1.getValue(), entry2.getValue());
+                List<Map.Entry<String, Double>> sortedWordCounts = wordCounts.entrySet().stream().sorted((entry1, entry2) -> {
+                    return -Double.compare(entry1.getValue(), entry2.getValue());
                 }).collect(Collectors.toList());
+                constrainWordCounts(sortedWordCounts);
                 logger.info("word counts {}", sortedWordCounts);
                 return null;
             });
@@ -68,12 +75,52 @@ public class PrintKafka
         }
     }
 
-    private static void addWordCounts (Map<String, Long> wordCounts, Map<String, Long> batchWordCounts) {
+    /**
+     * Truncate the word cloud based on the distinct word count limit.
+     * @param sortedWordCounts
+     */
+    private static void constrainWordCounts(List<Map.Entry<String, Double>> sortedWordCounts) {
+        int exceededCount = sortedWordCounts.size() - distinctWordLimit;
+        for (;exceededCount > 0; exceededCount--) {
+            sortedWordCounts.remove(sortedWordCounts.get(sortedWordCounts.size() - 1));
+        }
+    }
+
+    /**
+     * Implement time-based decay and weighting of word counts.
+     * @param wordCounts
+     * @param batchWordCounts
+     */
+    private static void addWordCounts (Map<String, Double> wordCounts, Map<String, Long> batchWordCounts) {
+
+        // Perform decay. Don't decay if there are no new results.
+        if (batchWordCounts.size() > 0) {
+            for (Map.Entry<String, Double> existingCountEntry : wordCounts.entrySet()) {
+                wordCounts.put(
+                        existingCountEntry.getKey(),
+                        existingCountEntry.getValue() * decayRate
+                );
+            }
+        }
+
+        // Increment weights.
         for (Map.Entry<String, Long> batchWordCountEntry : batchWordCounts.entrySet()) {
+            Double weight = wordCounts.getOrDefault(batchWordCountEntry.getKey(), 0D);
             wordCounts.put(
-                    batchWordCountEntry.getKey(),
-                    wordCounts.getOrDefault(batchWordCountEntry.getKey(), 0L) + batchWordCountEntry.getValue()
+                    batchWordCountEntry.getKey().toLowerCase(),  // Canonicalize terms.
+                    weight + batchWordCountEntry.getValue() * initialWeight
             );
+        }
+
+        // Drop words below weight threshold.
+        Map<String, Double> toDrop =
+                wordCounts.entrySet()
+                        .stream()
+                        .filter(p -> p.getValue() <= dropThreshold)
+                        .collect(Collectors.toMap(p -> p.getKey(), p -> p.getValue()));
+
+        for (String s : toDrop.keySet()) {
+            wordCounts.remove(s);
         }
     }
 }
