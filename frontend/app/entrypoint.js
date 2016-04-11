@@ -1,7 +1,7 @@
 import 'babel-polyfill';
 import './reset.scss';
-import Counter from './Counter';
 import React from 'react';
 import ReactDOM from 'react-dom';
+import WordCloud from './containers/WordCloud';
 
-ReactDOM.render(<Counter />, document.getElementById('content'));
+ReactDOM.render(<WordCloud />, document.getElementById('content'));

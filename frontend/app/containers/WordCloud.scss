@@ -1,0 +1,13 @@
+@import '../variables';
+
+:local(.word) {
+  font-size: 14px;
+  margin-left: 10px;
+  margin-top: 10px;
+}
+
+:local(.wordCloud) {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+}

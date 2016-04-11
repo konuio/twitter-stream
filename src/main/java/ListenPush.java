@@ -33,7 +33,7 @@ public class ListenPush
                     @Override
                     public void onStatus (Status status)
                     {
-                        logger.info("tweet {}", status.getText());
+                       // logger.info("tweet {}", status.getText());
                         producer.send(new ProducerRecord<>("test", "tweet", status.getText()));
                     }
                 };
