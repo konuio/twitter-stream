@@ -40,7 +40,7 @@ public class ListenPush
                 };
                 TwitterStream twitterStream = new TwitterStreamFactory().getInstance();
                 twitterStream.addListener(listener);
-                twitterStream.filter("Kardashian");
+                twitterStream.filter("Trump");
 
                 CountDownLatch disconnectLatch = new CountDownLatch(1);
                 twitterStream.addConnectionLifeCycleListener(new ConnectionLifeCycleListener() {
