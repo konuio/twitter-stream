@@ -1,3 +1,4 @@
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -15,18 +16,18 @@ import org.apache.spark.streaming.kafka.KafkaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.Tuple2;
+import scala.tools.nsc.Global;
 
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
  * Created by matt on 3/27/16.
  */
-public class PrintKafka
+public class PrintKafka implements SparkJob
 {
     private static Logger logger = LoggerFactory.getLogger(PrintKafka.class);
 
@@ -35,8 +36,38 @@ public class PrintKafka
     private static double decayRate = 0.5;
     private static double dropThreshold = 0.25;
     private static double initialWeight = 1;
+    private final Set<String> blacklist;
 
-    public static void main(String[] args) {
+    public PrintKafka() {
+        InputStream inputStream = null;
+        try {
+            try {
+                Properties prop = new Properties();
+                String propFileName = "config.properties";
+
+                inputStream = getClass().getClassLoader().getResourceAsStream(propFileName);
+
+                if (inputStream != null) {
+                    prop.load(inputStream);
+                } else {
+                    throw new FileNotFoundException("property file '" + propFileName + "' not found in the classpath");
+                }
+
+                // Initialize blacklist.
+                String[] blacklistProp = prop.getProperty("blacklist").split("\\s+");
+                this.blacklist = new HashSet<>(Arrays.asList(blacklistProp));
+
+            } catch (Exception e) {
+                throw new RuntimeException("Initialization error.", e);
+            } finally {
+                inputStream.close();
+            }
+        } catch (IOException e1) {
+            throw new RuntimeException("Error closing properties filestream.", e1);
+        }
+    }
+
+    public void startJob() {
         try {
             Map<String, Double> wordCounts = new HashMap<>();
             SparkConf conf = new SparkConf();
@@ -58,7 +89,6 @@ public class PrintKafka
                         .flatMap(tweet -> Arrays.asList(tweet.split("\\s+")))
                         .countByValue();
                 logger.info("batch word counts {}", batchWordCounts);
-
                 addWordCounts(wordCounts, batchWordCounts);
                 List<Map.Entry<String, Double>> sortedWordCounts = wordCounts.entrySet().stream().sorted((entry1, entry2) -> {
                     return -Double.compare(entry1.getValue(), entry2.getValue());
@@ -67,7 +97,6 @@ public class PrintKafka
                 logger.info("word counts {}", sortedWordCounts);
                 return null;
             });
-
             context.start();
             context.awaitTermination();
         } catch (Exception e) {
@@ -75,11 +104,12 @@ public class PrintKafka
         }
     }
 
+
     /**
      * Truncate the word cloud based on the distinct word count limit.
      * @param sortedWordCounts
      */
-    private static void constrainWordCounts(List<Map.Entry<String, Double>> sortedWordCounts) {
+    private void constrainWordCounts(List<Map.Entry<String, Double>> sortedWordCounts) {
         int exceededCount = sortedWordCounts.size() - distinctWordLimit;
         for (;exceededCount > 0; exceededCount--) {
             sortedWordCounts.remove(sortedWordCounts.get(sortedWordCounts.size() - 1));
@@ -91,7 +121,7 @@ public class PrintKafka
      * @param wordCounts
      * @param batchWordCounts
      */
-    private static void addWordCounts (Map<String, Double> wordCounts, Map<String, Long> batchWordCounts) {
+    private void addWordCounts (Map<String, Double> wordCounts, Map<String, Long> batchWordCounts) {
 
         // Perform decay. Don't decay if there are no new results.
         if (batchWordCounts.size() > 0) {
@@ -105,11 +135,13 @@ public class PrintKafka
 
         // Increment weights.
         for (Map.Entry<String, Long> batchWordCountEntry : batchWordCounts.entrySet()) {
-            Double weight = wordCounts.getOrDefault(batchWordCountEntry.getKey(), 0D);
-            wordCounts.put(
-                    batchWordCountEntry.getKey().toLowerCase(),  // Canonicalize terms.
-                    weight + batchWordCountEntry.getValue() * initialWeight
-            );
+            if (!blacklist.contains(batchWordCountEntry.getKey().toLowerCase())) {
+                Double weight = wordCounts.getOrDefault(batchWordCountEntry.getKey(), 0D);
+                wordCounts.put(
+                        batchWordCountEntry.getKey().toLowerCase(),  // Canonicalize terms.
+                        weight + batchWordCountEntry.getValue() * initialWeight
+                );
+            }
         }
 
         // Drop words below weight threshold.
@@ -122,5 +154,10 @@ public class PrintKafka
         for (String s : toDrop.keySet()) {
             wordCounts.remove(s);
         }
+    }
+
+
+    public static void main(String[] args) {
+        new PrintKafka().startJob();
     }
 }
