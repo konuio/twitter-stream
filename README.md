@@ -1,5 +1,7 @@
 Twitter Stream
 ===
+Backend
+---
 ```
 # Start Zookeeper
 zookeeper-server-start.sh /usr/local/etc/kafka/zookeeper.properties
@@ -28,4 +30,13 @@ kafka-console-consumer.sh --new-consumer --bootstrap-server localhost:9092 --top
 kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions 1 --topic test
 kafka-topics.sh --list --zookeeper localhost:2181
 kafka-topics.sh --delete --zookeeper localhost:2181 --topic test
+```
+
+Frontend
+---
+```
+cd frontend
+npm install
+npm start
+# Visit http://localhost:8082
 ```
