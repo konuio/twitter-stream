@@ -1,13 +1,13 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import kafka.serializer.StringDecoder;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.function.FlatMapFunction;
-import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.streaming.Durations;
-import org.apache.spark.streaming.Time;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
@@ -17,7 +17,6 @@ import org.slf4j.LoggerFactory;
 import scala.Tuple2;
 
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,8 +36,14 @@ public class PrintKafka
     private static double initialWeight = 1;
 
     public static void main(String[] args) {
-        try {
+        try (Producer<String, String> producer = new KafkaProducer<>(ImmutableMap.of(
+                "bootstrap.servers", "localhost:9092",
+                "key.serializer", "org.apache.kafka.common.serialization.StringSerializer",
+                "value.serializer", "org.apache.kafka.common.serialization.StringSerializer"
+        ))) {
+            ObjectMapper objectMapper = new ObjectMapper();
             Map<String, Double> wordCounts = new HashMap<>();
+
             SparkConf conf = new SparkConf();
             conf.setAppName("PrintKafka");
             JavaStreamingContext context = new JavaStreamingContext(conf, Durations.seconds(2));
@@ -62,9 +67,11 @@ public class PrintKafka
                 addWordCounts(wordCounts, batchWordCounts);
                 List<Map.Entry<String, Double>> sortedWordCounts = wordCounts.entrySet().stream().sorted((entry1, entry2) -> {
                     return -Double.compare(entry1.getValue(), entry2.getValue());
-                }).collect(Collectors.toList());
-                constrainWordCounts(sortedWordCounts);
+                }).limit(distinctWordLimit).collect(Collectors.toList());
                 logger.info("word counts {}", sortedWordCounts);
+
+                Map<String, Double> sortedWordCountMap = sortedWordCounts.stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                producer.send(new ProducerRecord<>("wordCounts", "wordCounts", objectMapper.writeValueAsString(sortedWordCountMap)));
                 return null;
             });
 
@@ -72,17 +79,6 @@ public class PrintKafka
             context.awaitTermination();
         } catch (Exception e) {
             throw Throwables.propagate(e);
-        }
-    }
-
-    /**
-     * Truncate the word cloud based on the distinct word count limit.
-     * @param sortedWordCounts
-     */
-    private static void constrainWordCounts(List<Map.Entry<String, Double>> sortedWordCounts) {
-        int exceededCount = sortedWordCounts.size() - distinctWordLimit;
-        for (;exceededCount > 0; exceededCount--) {
-            sortedWordCounts.remove(sortedWordCounts.get(sortedWordCounts.size() - 1));
         }
     }
 
