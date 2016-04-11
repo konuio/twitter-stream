@@ -1,11 +1,18 @@
+import classNames from 'classnames';
+import Immutable from 'immutable';
 import React from 'react';
+import styles from './WordCloud.scss';
 
 class Counter extends React.Component {
+  static propTypes = {
+    className: React.PropTypes.string,
+  };
+
   constructor(props) {
     super(props);
 
     this.state = {
-      counter: 0,
+      wordCounts: Immutable.Map(),
     };
 
     this.handleClick = this.handleClick.bind(this);
@@ -33,8 +40,11 @@ class Counter extends React.Component {
   }
 
   handleSocketMessage(message) {
-    const wordCounts = JSON.parse(message.data);
-    console.log('socket message:', wordCounts);
+    const wordCounts = Immutable.fromJS(JSON.parse(message.data));
+    console.log('socket message:', wordCounts.toJS());
+    this.setState({
+      wordCounts,
+    });
   }
 
   handleSocketOpen() {
@@ -42,18 +52,25 @@ class Counter extends React.Component {
   }
   
   render() {
-    const { className, counter } = this.state;
+    const { className } = this.props;
+    const { wordCounts } = this.state;
+
+    const totalCount = wordCounts.reduce((result, count) => result + count, 0);
+
     return (
-      <div className={className}>
-        <button
-          onClick={this.handleClick}
-          type="button"
-        >
-          Click me!
-        </button>
-        <div>
-          {counter}
-        </div>
+      <div className={classNames(styles.wordCloud, className)}>
+        {wordCounts.sortBy(count => -count).entrySeq().map(([word, count]) => {
+          return (
+            <div
+              className={styles.word}
+              style={{
+                fontSize: 12 + 100 * (count / totalCount),
+              }}
+            >
+              {word}
+            </div>
+          );
+        })}
       </div>
     );
   }
